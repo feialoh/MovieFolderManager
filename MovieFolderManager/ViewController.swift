@@ -113,13 +113,16 @@ class ViewController: NSViewController {
         stripFileCount = 0
         errorCount = 0
         if !filterText.stringValue.isEmpty {
-            stripFileNames(filterText.stringValue)
+            stripFileNames(filterText.stringValue, selectedDirectory: selectedDirectoryLabel.stringValue)
         } else {
             showAlert(title: "Error", message: "Please enter filter string")
         }
         
     }
     
+    /// To create folders
+    ///
+    /// - Parameter folderPath: Selected directory
     func processFiles(_ folderPath:String){
         
         let fileManager = FileManager.default
@@ -168,11 +171,14 @@ class ViewController: NSViewController {
     }
     
     
-    func stripFileNames(_ filterString:String){
+    /// To strip file names
+    ///
+    /// - Parameter filterString: string strip filter
+    func stripFileNames(_ filterString:String, selectedDirectory:String){
         
         let fileManager = FileManager.default
         
-        let folderURL = URL(fileURLWithPath: selectedDirectoryLabel.stringValue)
+        let folderURL = URL(fileURLWithPath: selectedDirectory)
         
         if (folderURL.isFileURL) {
             do {
@@ -201,6 +207,7 @@ class ViewController: NSViewController {
                                 if url != desinationPath {
                                     renameMove(url, destinationURL: desinationPath)
                                     stripFileCount += 1
+                                    stripFileNames(filterText.stringValue, selectedDirectory: desinationPath.relativePath)
                                 }
                             }
                         }
@@ -222,7 +229,16 @@ class ViewController: NSViewController {
         
     }
     
+    func renameFileInsideDirectory(){
+        
+    }
     
+    
+    /// Renaming/Moving files
+    ///
+    /// - Parameters:
+    ///   - fileURL: original file location
+    ///   - destinationURL: new file location with name
     func renameMove(_ fileURL:URL, destinationURL:URL) {
         
         do {
@@ -239,41 +255,6 @@ class ViewController: NSViewController {
         addLogsToView("Changed: \(fileURL.path) to \(destinationURL.path)\n", logType: .rename)
     }
     
-    
-    func getNumberOfFiles()->Int {
-        
-        let fileManager = FileManager.default
-        
-        let folderURL = URL(fileURLWithPath: selectedDirectoryLabel.stringValue)
-        
-        
-        if (folderURL.isFileURL) {
-            do {
-                let fileURLs = try fileManager.contentsOfDirectory(at: folderURL, includingPropertiesForKeys: nil)
-                // process files
-                for url in fileURLs {
-                    var isDir: ObjCBool = false
-                    
-                    if (fileManager.fileExists(atPath: url.path, isDirectory: &isDir)) {
-                        let uti = UTTypeCreatePreferredIdentifierForTag(kUTTagClassFilenameExtension, url.pathExtension as CFString, nil)
-                        if !isDir.boolValue && UTTypeConformsTo((uti?.takeRetainedValue())!, kUTTypeMovie){
-                            print("It's a file path:\(url.lastPathComponent)")
-
-                        }
-                    }
-                    else {
-                        print("Nothing selected")
-                    }
-                }
-                
-            } catch {
-                print("Error while enumerating files \(folderURL.path): \(error.localizedDescription)")
-            }
-        }
-        
-        return 0
-    }
-    
     @discardableResult
     func showAlert(title: String, message: String) -> Bool {
         let alert = NSAlert()
@@ -285,6 +266,11 @@ class ViewController: NSViewController {
     }
 
     
+    /// Adding logs of the operations
+    ///
+    /// - Parameters:
+    ///   - logs: Log strings
+    ///   - logType: log type
     func addLogsToView(_ logs:String, logType:LogType){
         
         var textColor = NSColor(hexString: "c60714")!
@@ -305,6 +291,7 @@ class ViewController: NSViewController {
     }
     
     
+    /// Summary of the result
     func summary() {
         
         summaryLabel.stringValue = "Summary : "
