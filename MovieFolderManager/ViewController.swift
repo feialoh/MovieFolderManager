@@ -8,6 +8,14 @@
 
 import Cocoa
 
+public enum LogType: Int {
+    
+    case rename
+    case create
+    case error
+    
+}
+
 class ViewController: NSViewController {
     
     
@@ -19,18 +27,43 @@ class ViewController: NSViewController {
     
     @IBOutlet weak var hintLabel: NSTextField!
     
+    
+    @IBOutlet weak var logScrollView: NSScrollView!
+    
+    
+    @IBOutlet var logTextView: NSTextView!
+    
+    @IBOutlet weak var currentSelectionLabel: NSTextField!
+    
+    @IBOutlet weak var summaryLabel: NSTextField!
+    
+    
+    var stripFileCount = 0
+    var createdFolderCount = 0
+    var errorCount = 0
+    
     override func viewDidLoad() {
         super.viewDidLoad()
 
         // Do any additional setup after loading the view.
         
-        hintLabel.stringValue = "Eg: Filename: Deadpool (2018) HDrip YIFY, Entering filter string: \")\" gives you-> Deadpool (2018)"
+        hintLabel.stringValue = "Eg: Filename: \"Deadpool (2018) HDrip YIFY\", Entering filter string: \")\" gives you-> Deadpool (2018)"
+        
+        currentSelectionLabel.isHidden = true
+
     }
 
     override var representedObject: Any? {
         didSet {
         // Update the view, if already loaded.
         }
+    }
+    
+    
+    @IBAction func clearLogsAction(_ sender: Any) {
+        
+        logTextView.string = ""
+        summaryLabel.stringValue = "Summary : "
     }
     
     
@@ -52,6 +85,7 @@ class ViewController: NSViewController {
             if (result != nil) {
                 let path = result!.path
                 selectedDirectoryLabel.stringValue = path
+                currentSelectionLabel.isHidden = false
             }
         } else {
             // User clicked on "Cancel"
@@ -62,14 +96,22 @@ class ViewController: NSViewController {
 
     @IBAction func createFoldersForFiles(_ sender: Any) {
         
+        createdFolderCount = 0
+        stripFileCount = 0
+        errorCount = 0
         if !selectedDirectoryLabel.stringValue.isEmpty {
             processFiles(selectedDirectoryLabel.stringValue)
+        }else {
+            showAlert(title: "Error", message: "Please select a folder")
         }
     }
     
     
     @IBAction func stripFileNames(_ sender: Any) {
 
+        createdFolderCount = 0
+        stripFileCount = 0
+        errorCount = 0
         if !filterText.stringValue.isEmpty {
             stripFileNames(filterText.stringValue)
         } else {
@@ -98,8 +140,11 @@ class ViewController: NSViewController {
                             print("It's a file path:\(url.lastPathComponent)")
                             if let newFolderPath = URL.createFolder(folderName: url.deletingPathExtension().lastPathComponent, folderPath: folderURL)
                             {
+//                               logTextView.string.append(contentsOf: "Created Folder at -> \(newFolderPath.path)\n")
+                                addLogsToView("Created Folder at -> \(newFolderPath.path)\n", logType: .create)
                                let destinationPath = newFolderPath.appendingPathComponent(url.lastPathComponent)
                                 renameMove( url, destinationURL: destinationPath)
+                                createdFolderCount += 1
                                 
                             }
                         }
@@ -109,10 +154,14 @@ class ViewController: NSViewController {
                     }
                 }
                 
-                NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: folderPath)
+                NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: selectedDirectoryLabel.stringValue)
+                summary()
                 
             } catch {
                 print("Error while enumerating files \(folderURL.path): \(error.localizedDescription)")
+                
+                addLogsToView("Error while enumerating files \(folderURL.path): \(error.localizedDescription)", logType: .error)
+                errorCount += 1
             }
         }
 
@@ -134,7 +183,7 @@ class ViewController: NSViewController {
                     
                     if (fileManager.fileExists(atPath: url.path, isDirectory: &isDir)) {
                         
-                        let fileName = url.deletingPathExtension().lastPathComponent
+                        let fileName = isDir.boolValue ? url.lastPathComponent : url.deletingPathExtension().lastPathComponent
                         
                         if let rangeOfFilter = fileName.range(of: filterString) {
                             let strippedFileName = fileName[..<rangeOfFilter.upperBound]
@@ -143,18 +192,29 @@ class ViewController: NSViewController {
                             let uti = UTTypeCreatePreferredIdentifierForTag(kUTTagClassFilenameExtension, url.pathExtension as CFString, nil)
                             if !isDir.boolValue && UTTypeConformsTo((uti?.takeRetainedValue())!, kUTTypeMovie){
                                 desinationPath = (folderURL.appendingPathComponent(String(strippedFileName))).appendingPathExtension(url.pathExtension)
-                                renameMove(url, destinationURL: desinationPath)
+                                if url != desinationPath {
+                                    renameMove(url, destinationURL: desinationPath)
+                                    stripFileCount += 1
+                                }
                             } else if isDir.boolValue {
-                                renameMove(url, destinationURL: desinationPath)
+                                
+                                if url != desinationPath {
+                                    renameMove(url, destinationURL: desinationPath)
+                                    stripFileCount += 1
+                                }
                             }
                         }
                         
                     }
                     else {
                         
-                        showAlert(title: "Error", message: "File Doesn't Exist")
+//                        showAlert(title: "Error", message: "File Doesn't Exist")
+                        errorCount += 1
+                        
                     }
                 }
+                NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: selectedDirectoryLabel.stringValue)
+                summary()
             } catch {
                 print("Error while enumerating files \(folderURL.path): \(error.localizedDescription)")
             }
@@ -173,7 +233,45 @@ class ViewController: NSViewController {
         }
         
         print("Changed: \(fileURL.path) to \(destinationURL.path) ")
+        
+//        logTextView.string.append(contentsOf: "Changed: \(fileURL.path) to \(destinationURL.path)\n")
 
+        addLogsToView("Changed: \(fileURL.path) to \(destinationURL.path)\n", logType: .rename)
+    }
+    
+    
+    func getNumberOfFiles()->Int {
+        
+        let fileManager = FileManager.default
+        
+        let folderURL = URL(fileURLWithPath: selectedDirectoryLabel.stringValue)
+        
+        
+        if (folderURL.isFileURL) {
+            do {
+                let fileURLs = try fileManager.contentsOfDirectory(at: folderURL, includingPropertiesForKeys: nil)
+                // process files
+                for url in fileURLs {
+                    var isDir: ObjCBool = false
+                    
+                    if (fileManager.fileExists(atPath: url.path, isDirectory: &isDir)) {
+                        let uti = UTTypeCreatePreferredIdentifierForTag(kUTTagClassFilenameExtension, url.pathExtension as CFString, nil)
+                        if !isDir.boolValue && UTTypeConformsTo((uti?.takeRetainedValue())!, kUTTypeMovie){
+                            print("It's a file path:\(url.lastPathComponent)")
+
+                        }
+                    }
+                    else {
+                        print("Nothing selected")
+                    }
+                }
+                
+            } catch {
+                print("Error while enumerating files \(folderURL.path): \(error.localizedDescription)")
+            }
+        }
+        
+        return 0
     }
     
     @discardableResult
@@ -186,6 +284,48 @@ class ViewController: NSViewController {
         return alert.runModal() == .alertFirstButtonReturn
     }
 
+    
+    func addLogsToView(_ logs:String, logType:LogType){
+        
+        var textColor = NSColor(hexString: "c60714")!
+        
+        switch logType {
+        case .rename:
+                textColor = NSColor(hexString: "1458a0")!
+        case .create:
+                textColor = NSColor(hexString: "087a47")!
+        default:
+            break
+        }
+        
+        
+        let attributes = [NSAttributedString.Key.foregroundColor: textColor]
+        let attrStr = NSMutableAttributedString(string: logs, attributes: attributes)
+        logTextView.textStorage?.append(attrStr)
+    }
+    
+    
+    func summary() {
+        
+        summaryLabel.stringValue = "Summary : "
+        var summaryString = ""
+        var errorString = ""
+        
+        if (createdFolderCount == 0) && (stripFileCount == 0) {
+            summaryString = "No files were modified."
+        } else if (createdFolderCount > 0) {
+            summaryString = (createdFolderCount == 1) ? "\(createdFolderCount) folder created." : "\(createdFolderCount) folder's were created."
+           
+        } else if (stripFileCount > 0) {
+            summaryString = (stripFileCount == 1) ? "\(stripFileCount) file/folder renamed" : "\(stripFileCount) file's/folder's were renamed."
+        }
+        
+         summaryLabel.stringValue.append(contentsOf: summaryString)
+        
+        errorString = (errorCount > 0) ? " \(errorCount) error occurred." : " No errors."
+        
+        summaryLabel.stringValue.append(contentsOf: errorString)
+    }
     
 }
 
@@ -203,9 +343,24 @@ extension URL {
                 return nil
             }
         }
-        print("Created Folder at -> \(folderURL.path)")
         return folderURL
     }
 }
 
 
+extension NSColor {
+    ///init method with hex string and alpha(default: 1)
+    public convenience init?(hexString: String, alpha: CGFloat = 1.0) {
+        var formatted = hexString.replacingOccurrences(of: "0x", with: "")
+        formatted = formatted.replacingOccurrences(of: "#", with: "")
+        if let hex = Int(formatted, radix: 16) {
+            let red = CGFloat(CGFloat((hex & 0xFF0000) >> 16)/255.0)
+            let green = CGFloat(CGFloat((hex & 0x00FF00) >> 8)/255.0)
+            let blue = CGFloat(CGFloat((hex & 0x0000FF) >> 0)/255.0)
+            self.init(red: red, green: green, blue: blue, alpha: alpha)
+        } else {
+            return nil
+        }
+    }
+    
+}
