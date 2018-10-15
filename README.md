@@ -11,9 +11,10 @@
 A simple folder manager which automatically creates the folder for all the video files which doesn't have a folder. It also has utility to strip filenames at once.
 
 # ScreenShot
-![Alt][screenshot1]		
 
-[screenshot1]:https://github.com/feialoh/MovieFolderManager/blob/master/MMScreenShot.png
+![Alt][screenshot1]	
+
+[screenshot1]:https://github.com/feialoh/MovieFolderManager/blob/master/MMScreenshot.png
 
 # Usage
 
