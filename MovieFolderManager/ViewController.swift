@@ -24,8 +24,11 @@ class ViewController: NSViewController {
     
     @IBOutlet weak var filterText: NSTextField!
     
+    @IBOutlet weak var filterText2: NSTextField!
     
     @IBOutlet weak var hintLabel: NSTextField!
+    
+    @IBOutlet weak var hintLabel2: NSTextField!
     
     
     @IBOutlet weak var logScrollView: NSScrollView!
@@ -48,6 +51,8 @@ class ViewController: NSViewController {
         // Do any additional setup after loading the view.
         
         hintLabel.stringValue = "Eg: Filename: \"Deadpool (2018) HDrip YIFY\", Entering filter string: \")\" gives you-> Deadpool (2018)"
+        
+        hintLabel2.stringValue = "Eg: Filename: \"01 My Song\", Entering filter string: \"01 \" gives you-> My Song"
         
         currentSelectionLabel.isHidden = true
 
@@ -120,6 +125,30 @@ class ViewController: NSViewController {
         
     }
     
+    @IBAction func stripFilenameFromStart(_ sender: Any) {
+        createdFolderCount = 0
+        stripFileCount = 0
+        errorCount = 0
+        if !filterText2.stringValue.isEmpty {
+            stripFileNamesFromStart(filterText2.stringValue, selectedDirectory: selectedDirectoryLabel.stringValue)
+        } else {
+            showAlert(title: "Error", message: "Please enter filter string")
+        }
+    }
+    
+    
+    @IBAction func renameFilesInOrder(_ sender: Any) {
+        createdFolderCount = 0
+        stripFileCount = 0
+        errorCount = 0
+        if !selectedDirectoryLabel.stringValue.isEmpty {
+            processFilesForRenaming(selectedDirectoryLabel.stringValue)
+        }else {
+            showAlert(title: "Error", message: "Please select a folder")
+        }
+    }
+    
+    
     /// To create folders
     ///
     /// - Parameter folderPath: Selected directory
@@ -168,6 +197,73 @@ class ViewController: NSViewController {
             }
         }
 
+    }
+    
+    
+    func processFilesForRenaming(_ selectedDirectory:String){
+        
+        let fileManager = FileManager.default
+        
+        let folderURL = URL(fileURLWithPath: selectedDirectory)
+        
+        
+        
+        if (folderURL.isFileURL) {
+            do {
+                let fileURLs = try fileManager.contentsOfDirectory(at: folderURL, includingPropertiesForKeys: nil, options:[.skipsHiddenFiles])
+                let zeroCount = "\(fileURLs.count)".count
+                
+               let sortedURLs = fileURLs.sorted(by: { (Obj1, Obj2) -> Bool in
+                let Obj1_Name = Obj1.absoluteString
+                let Obj2_Name = Obj2.absoluteString
+                    return (Obj1_Name.localizedCaseInsensitiveCompare(Obj2_Name) == .orderedAscending)
+                })
+                
+//                let sortedURLs = fileURLs.absoluteString.sorted(by: <)
+                // process files
+                for (index,url) in sortedURLs.enumerated() {
+                    let formatted = String(format: "%0\(zeroCount)d.", index+1)
+                    
+                    var isDir: ObjCBool = false
+                    
+                    if (fileManager.fileExists(atPath: url.path, isDirectory: &isDir)) {
+                        
+                        let fileName = isDir.boolValue ? url.lastPathComponent : url.deletingPathExtension().lastPathComponent
+                        
+                        let strippedFileName = "\(formatted)\(fileName)"
+                        print("New name:\(strippedFileName)")
+                            var desinationPath = folderURL.appendingPathComponent(String(strippedFileName))
+                            if !isDir.boolValue{
+                                desinationPath = (folderURL.appendingPathComponent(String(strippedFileName))).appendingPathExtension(url.pathExtension)
+                                if url != desinationPath {
+                                    renameMove(url, destinationURL: desinationPath)
+                                    stripFileCount += 1
+                                }
+                            } else if isDir.boolValue {
+                                
+                                if url != desinationPath {
+                                    renameMove(url, destinationURL: desinationPath)
+                                    stripFileCount += 1
+                                    stripFileNames(filterText.stringValue, selectedDirectory: desinationPath.relativePath)
+                                }
+                            }
+                        
+                        
+                    }
+                    else {
+                        
+                        //                        showAlert(title: "Error", message: "File Doesn't Exist")
+                        errorCount += 1
+                        
+                    }
+                }
+                NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: selectedDirectoryLabel.stringValue)
+                summary()
+            } catch {
+                print("Error while enumerating files \(folderURL.path): \(error.localizedDescription)")
+            }
+        }
+        
     }
     
     
@@ -229,8 +325,62 @@ class ViewController: NSViewController {
         
     }
     
-    func renameFileInsideDirectory(){
+    func stripFileNamesFromStart(_ filterString:String, selectedDirectory:String){
         
+        let fileManager = FileManager.default
+        
+        let folderURL = URL(fileURLWithPath: selectedDirectory)
+        
+        if (folderURL.isFileURL) {
+            do {
+                let fileURLs = try fileManager.contentsOfDirectory(at: folderURL, includingPropertiesForKeys: nil, options:[.skipsHiddenFiles])
+                // process files
+                for url in fileURLs {
+                    var isDir: ObjCBool = false
+                    
+                    if (fileManager.fileExists(atPath: url.path, isDirectory: &isDir)) {
+                        
+                        let fileName = isDir.boolValue ? url.lastPathComponent : url.deletingPathExtension().lastPathComponent
+                        
+                        var strippedFileName = isDir.boolValue ? url.lastPathComponent : url.deletingPathExtension().lastPathComponent
+                        
+                        
+                        if let rangeOfFilter = fileName.range(of: filterString) {
+                            
+                           strippedFileName.replaceSubrange(rangeOfFilter, with: "")
+//                            let strippedFileName = fileName[..<rangeOfFilter.upperBound]
+                            print("New name:\(strippedFileName)")
+                            var desinationPath = folderURL.appendingPathComponent(String(strippedFileName))
+                            if !isDir.boolValue{
+                                desinationPath = (folderURL.appendingPathComponent(String(strippedFileName))).appendingPathExtension(url.pathExtension)
+                                if url != desinationPath {
+                                    renameMove(url, destinationURL: desinationPath)
+                                    stripFileCount += 1
+                                }
+                            } else if isDir.boolValue {
+                                
+                                if url != desinationPath {
+                                    renameMove(url, destinationURL: desinationPath)
+                                    stripFileCount += 1
+                                    stripFileNames(filterText.stringValue, selectedDirectory: desinationPath.relativePath)
+                                }
+                            }
+                        }
+                        
+                    }
+                    else {
+                        
+                        //                        showAlert(title: "Error", message: "File Doesn't Exist")
+                        errorCount += 1
+                        
+                    }
+                }
+                NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: selectedDirectoryLabel.stringValue)
+                summary()
+            } catch {
+                print("Error while enumerating files \(folderURL.path): \(error.localizedDescription)")
+            }
+        }
     }
     
     
